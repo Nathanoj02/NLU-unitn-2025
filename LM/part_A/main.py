@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from functions import *
 from utils import *
-from model import LM_RNN
+from model import LM_RNN, LM_LSTM
 import torch.optim as optim
 
 import matplotlib.pyplot as plt
@@ -52,19 +52,27 @@ if __name__ == "__main__":
     # Increasing the back propagation steps can be seen as a regularization step
 
     # With SGD try with an higher learning rate (> 1 for instance)
-    lr = 0.0001 # This is definitely not good for SGD
+    lr = 0.5 # This is definitely not good for SGD
     clip = 5 # Clip the gradient
+
+    # Dropout and number of layers
+    emb_dropout = 0.1
+    out_dropout = 0.1
+    n_layers = 1
 
     vocab_len = len(lang.word2id)
 
-    model = LM_RNN(emb_size, hid_size, vocab_len, pad_index=lang.word2id["<pad>"]).to(DEVICE)
+    model = LM_RNN(emb_size, hid_size, vocab_len, pad_index=lang.word2id["<pad>"],
+                   emb_dropout = emb_dropout, out_dropout = out_dropout, n_layers = n_layers).to(DEVICE)
     model.apply(init_weights)
 
     optimizer = optim.SGD(model.parameters(), lr=lr)
+    # optimizer = optim.AdamW(model.parameters(), lr=lr)
+
     criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
     criterion_eval = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"], reduction='sum')
 
-    n_epochs = 10
+    n_epochs = 100
     patience = 3
     losses_train = []
     losses_dev = []
