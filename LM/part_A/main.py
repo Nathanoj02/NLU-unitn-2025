@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from functions import *
 from utils import *
-from model import LM_RNN, LM_LSTM
+from model import LM_RNN, LM_LSTM, LM_LSTM_dropout, LM_LSTM_weight_tying, LM_LSTM_var_dropout
 import torch.optim as optim
 
 import matplotlib.pyplot as plt
@@ -62,12 +62,16 @@ if __name__ == "__main__":
 
     vocab_len = len(lang.word2id)
 
-    model = LM_RNN(emb_size, hid_size, vocab_len, pad_index=lang.word2id["<pad>"],
+    # model = LM_RNN(emb_size, hid_size, vocab_len, pad_index=lang.word2id["<pad>"],
+    #                emb_dropout = emb_dropout, out_dropout = out_dropout, n_layers = n_layers).to(DEVICE)
+    
+    model = LM_LSTM_weight_tying(emb_size, vocab_len, pad_index=lang.word2id["<pad>"],
                    emb_dropout = emb_dropout, out_dropout = out_dropout, n_layers = n_layers).to(DEVICE)
     model.apply(init_weights)
 
-    optimizer = optim.SGD(model.parameters(), lr=lr)
+    # optimizer = optim.SGD(model.parameters(), lr=lr)
     # optimizer = optim.AdamW(model.parameters(), lr=lr)
+    optimizer = NT_AvSGD(model.parameters(), lr=lr, L=len(train_loader), n=5)
 
     criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
     criterion_eval = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"], reduction='sum')
@@ -87,6 +91,11 @@ if __name__ == "__main__":
             sampled_epochs.append(epoch)
             losses_train.append(np.asarray(loss).mean())
             ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
+
+            # Only for NT-AvSGD - update validation loss (for triggering)
+            optimizer.update_val_loss(ppl_dev)
+            # --------------------------------
+
             losses_dev.append(np.asarray(loss_dev).mean())
             pbar.set_description("PPL: %f" % ppl_dev)
             if  ppl_dev < best_ppl: # the lower, the better
@@ -98,6 +107,10 @@ if __name__ == "__main__":
                 
             if patience <= 0: # Early stopping with patience
                 break # Not nice but it keeps the code clean
+
+    # Only for NT-AvSGD - average weights after traning (last line in the paper's pseudo-code)
+    optimizer.apply_average()
+    # -----------------------
 
     best_model.to(DEVICE)
     final_ppl,  _ = eval_loop(test_loader, criterion_eval, best_model)    
